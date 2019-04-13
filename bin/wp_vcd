@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+
+echo "Clean-up Wordpress WP-VCD malware"
+
+[ -z "$1" ] && echo "Specify wordpress root dir to check" && exit 0
+[ ! -d "$1" ] && >&2 echo "Can't access directory $1" && exit 1
+
+cd $1
+
+
+# The following files are scanned:
+# ./wp-includes/wp-tmp.php
+# ./wp-includes/wp-feed.php
+# ./wp-includes/wp-vcd.php
+# ./themes/*/functions.php
+# ./wp-content/themes/*/class.theme-modules.php
+#
+# Add checks for: ./wp-includes/class.wp.php ./wp-includes/wp-cd.php
+# Remove "class.theme-modules.php" includes from infected files
+
+echo -n "./wp-includes/wp-tmp.php: "
+if [ -f "./wp-includes/wp-tmp.php" ]; then
+	echo "Known to serve malicious code"
+else
+	echo "File not found\n"
+fi
+
+echo -n "./wp-includes/wp-feed.php: "
+if [ -f "./wp-includes/wp-feed.php" ]; then
+	echo "It is used for storing users IP's who should not see AD anymore after they logged in."
+	echo "Looking for IP's in the file ..."
+	echo "Found IPs: "$(grep -P -o "\d+\.\d+\.\d+" "./wp-includes/wp-feed.php" | wc -l)
+else
+	echo "File not found"
+fi
+
+echo -n "./wp-includes/wp-vcd.php: "
+if [ -f "./wp-includes/wp-vcd.php" ]; then
+	echo "File known to contain malicious code, but automatic verification is not available"
+else
+	echo "File not found"
+fi
+
+echo "Checking malicious signatures in themes:"
+ls -1 ./wp-content/themes/*/functions.php | while read file; do
+	echo -n "$file: "
+	if [[ $(grep -e wp_vcd -e poxford -e WP_V_CD -e WP_CD "$file" | wc -l) -gt 0 ]]; then
+		echo "infected"
+	else
+		echo "no matches"
+	fi
+done
+
+ls -1 ./wp-content/themes/*/class.theme-modules.php | while read file; do
+	echo -n "File: $file: "
+	if [ "$(cat "$file")" == "<?php error_reporting(0);?>" ]; then
+		echo "Suspicious file. It can be safely removed"
+	fi
+done
+
